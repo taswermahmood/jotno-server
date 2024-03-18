@@ -2,7 +2,6 @@ package utils
 
 import (
 	"context"
-	"fmt"
 	"jotno-server/storage"
 	"os"
 	"strconv"
@@ -62,7 +61,7 @@ func RefreshToken(ctx iris.Context) {
 	token := jwt.GetVerifiedToken(ctx)
 	tokenStr := string(token.Token)
 	validToken, tokenErr := storage.Redis.Get(bgContext, tokenStr).Result()
-	fmt.Println(tokenErr)
+
 	if tokenErr != nil {
 		CreateNotFound(ctx)
 		return

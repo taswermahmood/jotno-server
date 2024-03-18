@@ -8,9 +8,7 @@ import (
 )
 
 func UserIDMiddleware(ctx iris.Context) {
-	params := ctx.Params()
-	id := params.Get("id")
-
+	id := ctx.URLParam("id")
 	claims := jwt.Get(ctx).(*AccessToken)
 
 	userID := strconv.FormatUint(uint64(claims.ID), 10)

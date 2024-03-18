@@ -2,7 +2,7 @@ package routes
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"jotno-server/models"
 	"jotno-server/storage"
 	"jotno-server/utils"
@@ -110,7 +110,7 @@ func FacebookLoginOrSignUp(ctx iris.Context) {
 	}
 
 	defer res.Body.Close()
-	body, bodyErr := ioutil.ReadAll(res.Body)
+	body, bodyErr := io.ReadAll(res.Body)
 	if bodyErr != nil {
 		log.Panic(bodyErr)
 		utils.InternalServerError(ctx)
@@ -174,7 +174,7 @@ func GoogleLoginOrSignUp(ctx iris.Context) {
 	}
 
 	defer res.Body.Close()
-	body, bodyErr := ioutil.ReadAll(res.Body)
+	body, bodyErr := io.ReadAll(res.Body)
 	if bodyErr != nil {
 		log.Panic(bodyErr)
 		utils.InternalServerError(ctx)
@@ -301,8 +301,7 @@ func ResetPassword(ctx iris.Context) {
 
 func UpdateUserInformation(ctx iris.Context) {
 
-	params := ctx.Params()
-	id := params.Get("id")
+	id := ctx.URLParam("id")
 
 	const maxSize = 5 * iris.MB
 	ctx.SetMaxRequestBodySize(maxSize)
@@ -365,8 +364,7 @@ func UpdateUserInformation(ctx iris.Context) {
 }
 
 func GetUserFavoritedSpecialists(ctx iris.Context) {
-	params := ctx.Params()
-	id := params.Get("id")
+	id := ctx.URLParam("id")
 	user := getUserByID(id, ctx)
 	if user == nil {
 		return
@@ -386,12 +384,15 @@ func GetUserFavoritedSpecialists(ctx iris.Context) {
 		return
 	}
 
-	ctx.JSON(&specialists)
+	var specialistList []any
+	for _, specialist := range specialists {
+		specialistList = append(specialistList, specialistMap(specialist))
+	}
+	ctx.JSON(specialistList)
 }
 
 func AlterUserFavorites(ctx iris.Context) {
-	params := ctx.Params()
-	id := params.Get("id")
+	id := ctx.URLParam("id")
 
 	user := getUserByID(id, ctx)
 	if user == nil {
@@ -457,8 +458,7 @@ func AlterUserFavorites(ctx iris.Context) {
 }
 
 func AlterPushToken(ctx iris.Context) {
-	params := ctx.Params()
-	id := params.Get("id")
+	id := ctx.URLParam("id")
 
 	user := getUserByID(id, ctx)
 	if user == nil {
@@ -514,8 +514,7 @@ func AlterPushToken(ctx iris.Context) {
 }
 
 func AllowsNotifications(ctx iris.Context) {
-	params := ctx.Params()
-	id := params.Get("id")
+	id := ctx.URLParam("id")
 
 	var req AllowsNotificationsInput
 	err := ctx.ReadJSON(&req)

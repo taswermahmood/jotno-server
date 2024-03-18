@@ -1,15 +1,18 @@
 package main
 
 import (
+	"jotno-server/models"
 	"jotno-server/routes"
 	"jotno-server/storage"
 	"jotno-server/utils"
 	"os"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/joho/godotenv"
 	"github.com/kataras/iris/v12"
 	"github.com/kataras/iris/v12/middleware/jwt"
+	"github.com/madflojo/tasks"
 )
 
 func main() {
@@ -67,46 +70,78 @@ func main() {
 		user.Post("/forgotPassword", routes.ForgotPassword)
 		user.Post("/resetPassword", resetTokenVerifierMiddleware, routes.ResetPassword)
 
-		user.Get("/{id}/specialist/favorited", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.GetUserFavoritedSpecialists)
-		user.Patch("/{id}/updateUserInformation", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.UpdateUserInformation)
-		user.Patch("/{id}/specialist/favorited", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.AlterUserFavorites)
-		user.Patch("/{id}/pushToken", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.AlterPushToken)
-		user.Patch("/{id}/settings/notifications", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.AllowsNotifications)
+		user.Get("/specialist/favorited", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.GetUserFavoritedSpecialists)
+		user.Patch("/updateUserInformation", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.UpdateUserInformation)
+		user.Patch("/specialist/favorited", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.AlterUserFavorites)
+		user.Patch("/pushToken", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.AlterPushToken)
+		user.Patch("/settings/notifications", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.AllowsNotifications)
 	}
 
 	specialist := app.Party("/jotno/api/specialist")
 	{
 		specialist.Post("/register", routes.RegisterSpecialist)
-
-		specialist.Get("/{specialistId}/user/{id}", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.GetSpecialistByID)
-		specialist.Get("/{specialistId}/{jobName}/user/{id}", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.GetSpecialistByIDAndJobName)
-		specialist.Post("/search/user/{id}", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.GetSpecialistByBoundingBox)
+		// specialist.Get("/{specialistId}/user", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.GetSpecialistByID)
+		specialist.Get("/getSpecialist", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.GetSpecialistByIDAndJobName)
+		specialist.Post("/search", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.GetSpecialistByBoundingBox)
 	}
 
 	jobPost := app.Party("/jotno/api/jobPost")
 	{
-		jobPost.Get("/getJobPosts/user/{id}", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.GetJobsPostsByUserID)
-		jobPost.Post("/createJobPosts/user/{id}", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.CreateJobPosts)
-		jobPost.Delete("/jobPost/{jobId}/user/{id}", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.DeleteJobPost)
+		jobPost.Get("/getJobPosts", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.GetJobsPostsByUserID)
+		jobPost.Post("/createJobPosts", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.CreateJobPosts)
+		jobPost.Delete("/deleteJobPost", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.DeleteJobPost)
 	}
 
-	notification := app.Party("/jotno/api/notification")
-	{
-		notification.Post("/sendNotification", routes.TestMessageNotification)
-	}
+	// notification := app.Party("/jotno/api/notification")
+	// {
+	// 	notification.Post("/sendNotification", routes.SendNotification)
+	// }
 
 	chat := app.Party("/jotno/api/chat")
 	{
-		chat.Post("/create/user/{id}", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.CreateChat)
-		chat.Post("/open/user/{id}", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.GetChatByUserAndSpecialistID)
-		chat.Get("/{chatId}/user/{id}", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.GetChatByID)
-		chat.Get("/user/{id}", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.GetChatsByUserID)
+		chat.Post("/create", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.CreateChat)
+		chat.Post("/open", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.GetChatByUserAndSpecialistID)
+		chat.Get("/getChat", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.GetChatByID)
+		chat.Get("/getChats", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.GetChatsByUserID)
 	}
 
 	messages := app.Party("/jotno/api/messages")
 	{
-		messages.Post("/create/user/{id}", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.CreateMessage)
+		messages.Post("/create", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.CreateMessage)
 	}
+
+	booking := app.Party("/jotno/api/booking")
+	{
+		booking.Get("/getBookingByUser", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.GetBookingByUserID)
+		booking.Post("/create", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.CreateBooking)
+		booking.Patch("/cancelBooking", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.CancelBooking)
+		booking.Get("/getPendingPaymentsByBookingID", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.GetPendingPaymentsByBookingID)
+		// booking.Patch("/updateBooking", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.DeleteJobPost)
+		// booking.Patch("/updatePayment", accessTokenVerifierMiddleware, utils.UserIDMiddleware, routes.DeleteJobPost)
+	}
+
+	scheduler := tasks.New()
+	defer scheduler.Stop()
+
+	scheduler.Add(&tasks.Task{
+		Interval: (24 * time.Hour),
+		TaskFunc: func() error {
+			var activeBookings []models.Booking
+			activeBookingsExists:= storage.DB.Where("active = true AND frequency = 'monthly' AND overdue = false").Find(&activeBookings)
+			if activeBookingsExists.Error != nil {
+				return nil
+			}
+			for i := 0; i < len(activeBookings); i++ {
+				routes.CreateBill(
+					activeBookings[i].ID,
+					activeBookings[i].Amount,
+					activeBookings[i].Currency,
+					activeBookings[i].UserID,
+				) 
+			}
+			return nil
+		},
+	})
 
 	app.Listen(":4000")
 }

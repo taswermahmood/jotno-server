@@ -22,7 +22,7 @@ func CreateChat(ctx iris.Context) {
 
 	var prevChat models.Chat
 	chatExists := storage.DB.
-		Where("user_id = ? AND specialist_id = ? ", req.UserID, req.SpecialistID).
+		Where("user_id = ? AND specialist_id = ? AND job_id = ?", req.UserID, req.SpecialistID, req.JobID).
 		Find(&prevChat)
 
 	if chatExists.Error != nil {
@@ -46,6 +46,7 @@ func CreateChat(ctx iris.Context) {
 	chat := models.Chat{
 		UserID:       req.UserID,
 		SpecialistID: req.SpecialistID,
+		JobId:        req.JobID,
 		Messages:     messages,
 	}
 
@@ -57,13 +58,13 @@ func CreateChat(ctx iris.Context) {
 func GetChatByUserAndSpecialistID(ctx iris.Context) {
 	var req GetChatInput
 	err := ctx.ReadJSON(&req)
-	
+
 	if err != nil {
 		utils.ValidationError(err, ctx)
 		return
 	}
-	
-	result, err := getChatResultsByUserIDAndSpecialistID(req.UserID, req.SpecialistID, ctx)
+
+	result, err := getChatResultsByUserIDAndSpecialistID(req.UserID, req.SpecialistID, req.JobID, ctx)
 	if err != nil {
 		return
 	}
@@ -81,8 +82,7 @@ func GetChatByUserAndSpecialistID(ctx iris.Context) {
 }
 
 func GetChatByID(ctx iris.Context) {
-	params := ctx.Params()
-	id := params.Get("chatId")
+	id := ctx.URLParam("chatId")
 
 	result, err := getChatResult(id, ctx)
 
@@ -104,8 +104,7 @@ func GetChatByID(ctx iris.Context) {
 }
 
 func GetChatsByUserID(ctx iris.Context) {
-	params := ctx.Params()
-	id := params.Get("id")
+	id := ctx.URLParam("id")
 
 	results, err := getChatResultsByUserID(id, ctx)
 
@@ -158,8 +157,10 @@ func getChatResult(id string, ctx iris.Context) (ChatResult, error) {
 	var result ChatResult
 	resultQuery := storage.DB.Table("chats").
 		Select(`chats.*,
-		 specialists.first_name as specialist_first_name, specialists.last_name as specialist_last_name, specialists.avatar as specialist_avatar,
-		 users.first_name as user_first_name, users.last_name as user_last_name, users.avatar as user_avatar`).
+		jobs.job_name as specialist_job_name,
+		specialists.first_name as specialist_first_name, specialists.last_name as specialist_last_name, specialists.avatar as specialist_avatar,
+		users.first_name as user_first_name, users.last_name as user_last_name, users.avatar as user_avatar`).
+		Joins("INNER JOIN jobs on chats.job_id = jobs.id").
 		Joins("INNER JOIN specialists on chats.specialist_id = specialists.id").
 		Joins("INNER JOIN users on chats.user_id = users.id").
 		Where("chats.id = ?", id).
@@ -178,15 +179,17 @@ func getChatResult(id string, ctx iris.Context) (ChatResult, error) {
 	return result, nil
 }
 
-func getChatResultsByUserIDAndSpecialistID(userId uint, specialistId uint, ctx iris.Context) (ChatResult, error) {
+func getChatResultsByUserIDAndSpecialistID(userId uint, specialistId uint, jobId uint, ctx iris.Context) (ChatResult, error) {
 	var result ChatResult
 	resultQuery := storage.DB.Table("chats").
 		Select(`chats.*,
-		 specialists.first_name as specialist_first_name, specialists.last_name as specialist_last_name, specialists.avatar as specialist_avatar,
+		jobs.job_name as specialist_job_name, 
+		specialists.first_name as specialist_first_name, specialists.last_name as specialist_last_name, specialists.avatar as specialist_avatar,
 		 users.first_name as user_first_name, users.last_name as user_last_name, users.avatar as user_avatar`).
+		Joins("INNER JOIN jobs on chats.job_id = jobs.id").
 		Joins("INNER JOIN specialists on chats.specialist_id = specialists.id").
 		Joins("INNER JOIN users on chats.user_id = users.id").
-		Where("chats.user_id = ? AND chats.specialist_id = ? ", userId, specialistId).
+		Where("chats.user_id = ? AND chats.specialist_id = ? AND chats.job_id = ?", userId, specialistId, jobId).
 		Scan(&result)
 
 	if resultQuery.Error != nil {
@@ -206,8 +209,10 @@ func getChatResultsByUserID(id string, ctx iris.Context) ([]ChatResult, error) {
 	var result []ChatResult
 	resultQuery := storage.DB.Table("chats").
 		Select(`chats.*,
+		jobs.job_name as specialist_job_name,
 		 specialists.first_name as specialist_first_name, specialists.last_name as specialist_last_name, specialists.avatar as specialist_avatar,
 		 users.first_name as user_first_name, users.last_name as user_last_name, users.avatar as user_avatar`).
+		Joins("INNER JOIN jobs on chats.job_id = jobs.id").
 		Joins("INNER JOIN specialists on chats.specialist_id = specialists.id").
 		Joins("INNER JOIN users on chats.user_id = users.id").
 		Where("chats.user_id = ?", id).Or("chats.specialist_id = ?", id).
@@ -231,7 +236,9 @@ type ChatResult struct {
 	gorm.Model
 	UserID       uint `json:"userID"`
 	SpecialistID uint `json:"specialistID"`
+	JobID        uint `json:"jobID"`
 	// Specialist
+	SpecialistJobName   string `json:"specialistJobName"`
 	SpecialistFirstName string `json:"specialistFirstName"`
 	SpecialistLastName  string `json:"specialistLastName"`
 	SpecialistAvatar    string `json:"specialistAvatar"`
@@ -246,6 +253,7 @@ type ChatResult struct {
 type CreateChatInput struct {
 	UserID       uint   `json:"userID" validate:"required"`
 	SpecialistID uint   `json:"specialistID" validate:"required"`
+	JobID        uint   `json:"jobID" validate:"required"`
 	SenderID     uint   `json:"senderID" validate:"required"`
 	ReceiverID   uint   `json:"receiverID" validate:"required"`
 	Text         string `json:"text" validate:"required,lt=5000"`
@@ -254,4 +262,5 @@ type CreateChatInput struct {
 type GetChatInput struct {
 	UserID       uint `json:"userID" validate:"required"`
 	SpecialistID uint `json:"specialistID" validate:"required"`
+	JobID        uint `json:"jobID" validate:"required"`
 }

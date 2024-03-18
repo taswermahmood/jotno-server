@@ -49,8 +49,7 @@ func RegisterSpecialist(ctx iris.Context) {
 }
 
 func GetSpecialistByID(ctx iris.Context) {
-	params := ctx.Params()
-	id := params.Get("specialistId")
+	id := ctx.URLParam("specialistId")
 
 	specialist := getSpecialistAndAssociationsByID(id, ctx)
 	if specialist == nil {
@@ -60,9 +59,8 @@ func GetSpecialistByID(ctx iris.Context) {
 }
 
 func GetSpecialistByIDAndJobName(ctx iris.Context) {
-	params := ctx.Params()
-	id := params.Get("specialistId")
-	jobName := params.Get("jobName")
+	id := ctx.URLParam("specialistId")
+	jobName := ctx.URLParam("jobName")
 
 	var specialist models.Specialist
 	specialistExists := storage.DB.Preload("Jobs", "job_name = ? ", jobName).Preload("Reviews").Preload("Posts").Where("id = ?", id).Find(&specialist)

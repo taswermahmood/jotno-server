@@ -32,8 +32,7 @@ func CreateJobPosts(ctx iris.Context) {
 }
 
 func GetJobsPostsByUserID(ctx iris.Context) {
-	params := ctx.Params()
-	id := params.Get("id")
+	id := ctx.URLParam("id")
 
 	var jobPosts []models.JobPost
 	jobPostsExists := storage.DB.Preload(clause.Associations).Where("user_id = ?", id).Find(&jobPosts)
@@ -44,8 +43,7 @@ func GetJobsPostsByUserID(ctx iris.Context) {
 }
 
 func DeleteJobPost(ctx iris.Context) {
-	params := ctx.Params()
-	id := params.Get("jobId")
+	id := ctx.URLParam("jobId")
 
 	jobPostsDeleted := storage.DB.Delete(&models.JobPost{}, id)
 	if jobPostsDeleted.Error != nil {
@@ -56,13 +54,12 @@ func DeleteJobPost(ctx iris.Context) {
 }
 
 func GetCommentsByJobPostID(ctx iris.Context) {
-	params := ctx.Params()
-	id := params.Get("id")
+	id := ctx.URLParam("id")
 
 	var comments []models.Comment
 	commentsExist := storage.DB.Preload(clause.Associations).Where("job_post_id = ?", id).Find(&comments)
 
-	if commentsExist.Error != nil{
+	if commentsExist.Error != nil {
 		utils.CreateError(iris.StatusInternalServerError, "Error", commentsExist.Error.Error(), ctx)
 		return
 	}
@@ -70,12 +67,11 @@ func GetCommentsByJobPostID(ctx iris.Context) {
 }
 
 type CreateJobPostInput struct {
-	JobType       string `json:"jobType" validate:"required,oneof=petCare elderlyCare babySitter houseKeeping teacher"`
+	JobType       string `json:"jobType" validate:"required,oneof=petCare elderlyCare babySitting houseKeeping teaching"`
 	Title         string `json:"title" validate:"required,max=256"`
 	Description   string `json:"description" validate:"required,max=512"`
 	Wage          int    `json:"wage" validate:"required"`
-	WageFrequency string `json:"wageFrequency" validate:"required,oneof=monthly oneTime"`
+	WageFrequency string `json:"wageFrequency" validate:"required,oneof=monthly daily"`
 	DateTime      string `json:"dateTime" validate:"required,max=20"`
 	UserID        uint   `json:"userID" validate:"required"`
 }
-

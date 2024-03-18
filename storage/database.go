@@ -38,6 +38,8 @@ func performMigrations(db *gorm.DB) {
 		&models.Comment{},
 		&models.Chat{},
 		&models.Message{},
+		&models.Booking{},
+		&models.Bill{},
 	)
 }
 
